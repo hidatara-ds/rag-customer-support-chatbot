@@ -24,8 +24,17 @@ app.add_middleware(
 # Serve frontend (opsional)
 app.mount("/web", StaticFiles(directory="frontend", html=True), name="web")
 
-# Init DB (create tables if needed)
-db.init_db()
+import logging
+logger = logging.getLogger("uvicorn")
+
+@app.on_event("startup")
+async def on_startup():
+    try:
+        db.init_db()
+        logger.info("DB initialized")
+    except Exception as e:
+        logger.warning(f"DB init failed (server will still run): {e}")
+
 
 @app.get("/health")
 def health():

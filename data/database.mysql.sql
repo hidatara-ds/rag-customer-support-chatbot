@@ -38,3 +38,30 @@ INSERT INTO orders (user_name, product_id, status) VALUES
 ('alice', 1, 'shipped'),
 ('bob',   2, 'delivered'),
 ('alice', 3, 'pending');
+
+def seed_if_empty() -> None:
+    from sqlalchemy import select
+    with SessionLocal() as s:
+        has_products = s.scalar(select(Product.product_id).limit(1)) is not None
+        if not has_products:
+            s.add_all([
+                Product(name="Espresso", description="Strong and rich coffee shot", price=2.50),
+                Product(name="Latte", description="Espresso with steamed milk and light foam", price=3.50),
+                Product(name="Cold Brew", description="Smooth cold brewed coffee, less acidic", price=3.00),
+            ])
+            s.commit()
+        has_orders = s.scalar(select(Order.order_id).limit(1)) is not None
+        if not has_orders:
+            espresso = s.scalar(select(Product).where(Product.name=="Espresso"))
+            latte    = s.scalar(select(Product).where(Product.name=="Latte"))
+            coldbrew = s.scalar(select(Product).where(Product.name.ilike("Cold Brew")))
+            s.add_all([
+                Order(user_name="alice", product_id=espresso.product_id, status="shipped"),
+                Order(user_name="bob",   product_id=latte.product_id,    status="delivered"),
+                Order(user_name="alice", product_id=coldbrew.product_id, status="pending"),
+            ])
+            s.commit()
+
+def init_db() -> None:
+    Base.metadata.create_all(engine)
+    seed_if_empty()
