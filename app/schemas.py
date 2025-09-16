@@ -2,8 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 class ChatRequest(BaseModel):
-    user: str = Field(..., examples=["alice"])
-    message: str = Field(..., examples=["Where is my order?"])
+    user: str = Field(..., examples=["gilang"])
+    message: str = Field(..., examples=["Ukuran apa saja untuk Air Max 90?"])
 
 class ChatResponse(BaseModel):
     answer: str
