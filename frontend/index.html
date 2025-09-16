@@ -2,51 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>Coffee Support Chatbot</title>
+  <title>Shoe Support Chatbot</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
     :root { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; }
-    body { margin: 0; background: #0f172a; color: #e2e8f0; }
-    .wrap { max-width: 920px; margin: 40px auto; padding: 16px; }
-    .card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 16px; }
-    h1 { font-size: 28px; margin: 0 0 12px; }
-    .row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; margin-top: 10px; }
-    input, textarea, button, select {
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+    .header { padding: 14px 16px; background: #0b1220; border-bottom: 1px solid #1f2937; }
+    .title { font-size: 18px; margin: 0; }
+    .wrap { flex: 1; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 980px; display: flex; flex-direction: column; }
+
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .msg { padding: 10px 12px; border-radius: 12px; max-width: 80%; word-wrap: break-word; white-space: pre-wrap; }
+    .user { background: #1e293b; align-self: flex-end; }
+    .assistant { background: #0b1220; border: 1px solid #233a66; align-self: flex-start; }
+
+    .input-bar {
+      position: sticky; bottom: 0; /* tetap di bawah, tidak kegeser chat */
+      background: linear-gradient(180deg, rgba(15,23,42,0) 0%, #0f172a 20%);
+      padding: 16px;
+      border-top: 1px solid #1f2937;
+    }
+    .row { display: grid; grid-template-columns: 160px 1fr 110px; gap: 10px; }
+    input, textarea, button {
       background: #0b1220; color: #e2e8f0; border: 1px solid #233a66; border-radius: 12px;
       padding: 10px 12px; outline: none;
     }
     button { cursor: pointer; }
-    .chat { margin-top: 18px; display: grid; gap: 10px; }
-    .msg { padding: 10px 12px; border-radius: 12px; }
-    .user { background: #1e293b; justify-self: end; max-width: 80%; }
-    .assistant { background: #0b1220; border: 1px solid #233a66; justify-self: start; max-width: 80%; }
-    .badge { font-size: 12px; opacity: .8; }
+    .hint { font-size: 12px; opacity: .8; margin-top: 8px; }
+
+    @media (max-width: 640px) {
+      .row { grid-template-columns: 1fr 80px; }
+      #user { display: none; }
+    }
   </style>
 </head>
 <body>
+  <div class="header">
+    <h1 class="title">👟 Shoe Store Support Chatbot</h1>
+  </div>
   <div class="wrap">
-    <div class="card">
-      <h1>☕ Coffee Support Chatbot</h1>
-      <div class="row">
-        <input id="user" placeholder="username (contoh: alice)" value="alice"/>
-        <button id="presetOrder">Order Status</button>
+    <div class="container">
+      <div id="chat" class="chat-area">
+        <!-- messages go here -->
       </div>
-      <div class="row">
-        <input id="msg" placeholder="Type your message... (e.g., Where is my order?)"/>
-        <button id="send">Send</button>
+
+      <div class="input-bar">
+        <div class="row">
+          <input id="user" placeholder="username (contoh: gilang)" value="gilang"/>
+          <input id="msg" placeholder="Ask something… (e.g., Where is my order?)"/>
+          <button id="send">Send</button>
+        </div>
+        <div class="hint">
+          Tips: “Where is my order?”, “Apa kelebihan Ultraboost 22?”, “Bagaimana klaim garansi?”
+        </div>
       </div>
-      <div style="margin-top:8px">
-        <span class="badge">Tips: cobalah “Where is my order?”, “Apa kelebihan Latte?”, “Bagaimana klaim garansi?”</span>
-      </div>
-      <div id="chat" class="chat"></div>
     </div>
   </div>
+
   <script>
     const chat = document.getElementById('chat');
     const userEl = document.getElementById('user');
     const msgEl = document.getElementById('msg');
     const sendBtn = document.getElementById('send');
-    const presetBtn = document.getElementById('presetOrder');
 
     function push(role, text) {
       const div = document.createElement('div');
@@ -57,8 +84,8 @@
     }
 
     async function send() {
-      const user = userEl.value.trim();
-      const message = msgEl.value.trim();
+      const user = (userEl.value || "").trim();
+      const message = (msgEl.value || "").trim();
       if (!user || !message) return;
       push('user', message);
       msgEl.value = '';
@@ -77,7 +104,9 @@
 
     sendBtn.onclick = send;
     msgEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
-    presetBtn.onclick = () => { msgEl.value = 'Where is my order?'; msgEl.focus(); };
+
+    // optional: preload greeting
+    push('assistant', 'Hi! I’m your shoe store assistant. How can I help you today?');
   </script>
 </body>
 </html>

@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from typing import List
+import logging
+
 from . import db
 from .schemas import ChatRequest, ChatResponse, ProductOut, OrderOut
 from .utils import (
@@ -11,9 +13,10 @@ from .utils import (
 )
 from .llm import generate_answer
 
-app = FastAPI(title="Coffee Support Chatbot", version="1.0.0")
+logger = logging.getLogger("uvicorn")
 
-# CORS (agar frontend fetch ke API gampang)
+app = FastAPI(title="Shoe Store Support Chatbot", version="1.1.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,11 +24,7 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
-# Serve frontend (opsional)
 app.mount("/web", StaticFiles(directory="frontend", html=True), name="web")
-
-import logging
-logger = logging.getLogger("uvicorn")
 
 @app.on_event("startup")
 async def on_startup():
@@ -34,7 +33,6 @@ async def on_startup():
         logger.info("DB initialized")
     except Exception as e:
         logger.warning(f"DB init failed (server will still run): {e}")
-
 
 @app.get("/health")
 def health():
@@ -47,7 +45,6 @@ def products():
 
 @app.get("/orders/{user}", response_model=List[OrderOut])
 def orders(user: str):
-    # sederhana: tampilkan semua order latest->oldest (opsional; di sini contoh minimal—ambil latest saja)
     latest = db.get_latest_order(user)
     if not latest:
         return []
@@ -64,14 +61,14 @@ def chat(req: ChatRequest):
     if not user or not message:
         raise HTTPException(status_code=400, detail="user and message are required")
 
-    # 1) simpan pesan user
+    # save user msg
     db.save_message(user, "user", message)
 
-    # 2) ambil history
-    history = db.get_last_messages(user, limit=6)
+    # history (unlimited in DB; untuk prompt pakai MAX_HISTORY_MESSAGES)
+    history = db.get_last_messages(user, limit=None)
     history_block = format_history_for_prompt(history)
 
-    # 3) tool routing
+    # tool routing
     tool_text = None
     answered_by_tool = False
 
@@ -79,7 +76,6 @@ def chat(req: ChatRequest):
         order_id = extract_order_id(message)
         order = db.get_order_by_id(order_id) if order_id else db.get_latest_order(user)
         tool_text = tool_answer_order(order)
-        # Jawab langsung (tool-first)
         answer = f"{tool_text} If you need more details, I can provide tracking info."
         answered_by_tool = True
 
@@ -95,11 +91,9 @@ def chat(req: ChatRequest):
         answer = tool_text
         answered_by_tool = True
 
-    # 4) kalau belum terjawab oleh tool, minta ke LLM
     if not answered_by_tool:
         prompt = build_prompt(history_block, message, tool_text)
         answer = generate_answer(prompt)
 
-    # 5) simpan jawaban assistant
     db.save_message(user, "assistant", answer)
     return ChatResponse(answer=answer)
