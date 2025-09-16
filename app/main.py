@@ -73,7 +73,6 @@ def chat(req: ChatRequest):
     db.save_message(user, "user", message)
     history = db.get_last_messages(user, limit=None)
     history_block = format_history_for_prompt(history)
-
     tool_text = None
     answered = False
 

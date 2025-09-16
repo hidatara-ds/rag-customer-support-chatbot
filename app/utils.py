@@ -2,27 +2,13 @@ import re
 from typing import List, Optional
 from .models import Conversation, Order, Product
 
+# Tangkap "order #123" atau "pesanan 123"
 ORDER_PAT = re.compile(r"(?:order|pesanan)\s*#?\s*(\d+)", re.IGNORECASE)
-CATEGORY_PAT = re.compile(r"\b(running|casual|basketball|skate|hiking|training)\b", re.IGNORECASE)
-BRAND_PAT = re.compile(r"\b(nike|adidas|converse|vans|new balance|reebok|salomon)\b", re.IGNORECASE)
-SIZE_NUM_PAT = re.compile(r"(?:ukuran|size)\s*([0-9]{2})", re.IGNORECASE)
+PRODUCT_PAT = re.compile(r"(espresso|latte|cold\s*brew)", re.IGNORECASE)
 
-PRODUCT_PAT = re.compile(
-    r"(air\s*max\s*90|ultraboost\s*22|chuck\s*taylor\s*all\s*star|vans\s*old\s*skool|"
-    r"air\s*jordan\s*1\s*mid|kyrie\s*flytrap\s*6|nb\s*990v5|nb\s*574\s*core|gazelle|"
-    r"pegasus\s*40|metcon\s*9|nano\s*x3|terrex\s*swift\s*r3|salomon\s*xa\s*pro\s*3d|"
-    r"blazer\s*mid\s*'?\s*77|sk8-?hi)",
-    re.IGNORECASE
-)
-
-# -------- intents ----------
-def is_order_status_query(t:str)->bool:
-    keys=["where is my order","order status","status pesanan","dimana pesanan","pesanan saya","cek pesanan","track order","lacak pesanan"]
-    return any(k in t.lower() for k in keys) or bool(ORDER_PAT.search(t))
-
-def is_category_list_query(t:str)->bool:
-    keys=["jenis sepatu apa saja","kategori apa saja","daftar kategori","jenis apa saja","kategori yang ada","jenis sepatu apa aja","kategori apa aja"]
-    return any(k in t.lower() for k in keys)
+def is_order_status_query(text: str) -> bool:
+    keys = ["where is my order", "order status", "status pesanan", "dimana pesanan", "pesanan saya", "cek pesanan"]
+    return any(k in text.lower() for k in keys) or bool(ORDER_PAT.search(text))
 
 def is_category_inventory_query(t:str)->bool:
     return bool(CATEGORY_PAT.search(t)) and any(k in t.lower() for k in ["ada apa","apa saja","daftar","list"])
@@ -83,12 +69,17 @@ def extract_size_num(t:str)->Optional[int]:
         except: return None
     return None
 
-# -------- tool answers ----------
-def tool_answer_list(title: str, prods: List[Product]) -> str:
-    if not prods:
-        return f"Tidak ditemukan item untuk {title}."
-    lines = [f"- {p.name} ({p.brand}, {p.category}) — ${p.price:.2f} | size: {p.sizes}" for p in prods]
-    return f"{title}:\n" + "\n".join(lines)
+def is_product_query(text: str) -> bool:
+    keys = ["kelebihan", "fitur", "advantages", "what is", "tell me about", "product"]
+    return any(k in text.lower() for k in keys) or bool(PRODUCT_PAT.search(text))
+
+def extract_product_name(text: str) -> Optional[str]:
+    m = PRODUCT_PAT.search(text)
+    return m.group(1) if m else None
+
+def is_warranty_query(text: str) -> bool:
+    keys = ["warranty", "garansi", "klaim garansi", "claim warranty"]
+    return any(k in text.lower() for k in keys)
 
 def tool_answer_order(order: Optional[Order]) -> str:
     if not order:
@@ -103,57 +94,31 @@ def tool_answer_product(p: Optional[Product]) -> str:
             f"Harga: ${p.price:.2f}. Ukuran ready: {p.sizes}. Stok total: {p.stock_total} pasang.")
 
 def tool_answer_warranty() -> str:
-    return ("Untuk pembelian sepatu, kami menyediakan **retur/penukaran 30 hari** dan **garansi 1 tahun** "
-            "untuk cacat produksi. Siapkan nomor pesanan dan bukti pembelian. "
-            "Anda bisa mulai klaim lewat chat ini atau email ke support@shoestore.test.")
+    return (
+        "Our products include a **1-year limited warranty**. "
+        "To claim, please provide your order number and purchase receipt. "
+        "You can start a claim via this chat or email support@coffeestore.test."
+    )
 
-def tool_answer_sizes(p: Optional[Product]) -> str:
-    if not p:
-        return "Saya tidak menemukan produk tersebut. Bisa sebutkan nama produk lengkapnya?"
-    return f"Ukuran {p.name} yang ready: {p.sizes}. Stok total saat ini: {p.stock_total}."
-
-def tool_answer_size_stock_exact(p: Optional[Product], size: Optional[int], exact_stock: Optional[int]) -> str:
-    if not p:
-        return "Saya tidak menemukan produk tersebut. Bisa sebutkan nama produk lengkapnya?"
-    if size is None:
-        return f"Untuk stok per ukuran {p.name}, mohon sebutkan ukurannya. Ukuran ready: {p.sizes}."
-    if str(size) not in (p.sizes or ""):
-        return f"Ukuran {size} untuk {p.name} tidak tertera pada daftar ready: {p.sizes}."
-    qty = 0 if exact_stock is None else int(exact_stock)
-    return f"Stok ukuran {size} untuk {p.name}: **{qty}** pasang."
-
-def tool_answer_categories(categories: List[str]) -> str:
-    if not categories: return "Kategori belum tersedia."
-    return "Kategori yang tersedia: " + ", ".join(sorted(categories)) + "."
-
-def tool_answer_pricelist(rows: List[tuple], cat: Optional[str]) -> str:
-    if not rows: return "Belum ada data harga untuk permintaan tersebut."
-    head = f"Daftar harga{f' kategori {cat}' if cat else ''}:"
-    lines = [f"- {name}: ${price:.2f}" for name, price in rows]
-    return head + "\n" + "\n".join(lines)
-
-def tool_answer_other_products(current_name: Optional[str], others: List[str]) -> str:
-    if not others: return "Saat ini belum ada rekomendasi lain."
-    if current_name:
-        return f"Selain {current_name}, Anda bisa cek: " + ", ".join(others) + "."
-    return "Rekomendasi lain: " + ", ".join(others) + "."
-
-# -------- prompt ----------
 def format_history_for_prompt(history: List[Conversation]) -> str:
-    if not history: return ""
+    """
+    Ambil N interaksi (Q/A). Default MEMORY_TURNS = 3 (=> 6 pesan max).
+    Pastikan urut kronologis.
+    """
+    if not history:
+        return ""
     lines = []
-    for msg in history:
+    # history sudah kronologis
+    selected = history[-(MEMORY_TURNS*2):]  # kira-kira 3 Q/A = 6 messages
+    for msg in selected:
         role = "User" if msg.role == "user" else "Assistant"
         lines.append(f"{role}: {msg.message}")
     return "\n".join(lines)
 
 def build_prompt(history_block: str, user_message: str, tool_context: Optional[str]) -> str:
     sys = (
-        "Kamu adalah asisten Customer Support untuk toko sepatu online. "
-        "Jawab **dalam Bahasa Indonesia**, ringkas, jelas, sopan. "
-        "Selalu dasarkan jawaban pada data katalog (TOOL_INFO) jika tersedia; jangan mengarang. "
-        "Jika pertanyaan masih terkait produk, ukuran, harga, pesanan, retur/garansi, kategori, brand, atau rekomendasi, "
-        "tetap usahakan menjawab. Jika benar-benar di luar konteks, jelaskan keterbatasanmu."
+        "You are a helpful customer support assistant for an online coffee store. "
+        "Answer concisely and accurately. If a tool result is provided, prefer it over assumptions."
     )
     tool = f"\nTOOL_INFO:\n{tool_context}" if tool_context else ""
     return f"{sys}\n\n{history_block}\nUser: {user_message}{tool}\nAssistant:"

@@ -12,16 +12,37 @@
     .title { font-size: 18px; margin: 0; }
     .wrap { flex: 1; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 980px; display: flex; flex-direction: column; }
-    .chat-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     .msg { padding: 10px 12px; border-radius: 12px; max-width: 80%; word-wrap: break-word; white-space: pre-wrap; }
     .user { background: #1e293b; align-self: flex-end; }
     .assistant { background: #0b1220; border: 1px solid #233a66; align-self: flex-start; }
-    .input-bar { position: sticky; bottom: 0; background: linear-gradient(180deg, rgba(15,23,42,0) 0%, #0f172a 20%); padding: 16px; border-top: 1px solid #1f2937; }
+
+    .input-bar {
+      position: sticky; bottom: 0; /* tetap di bawah, tidak kegeser chat */
+      background: linear-gradient(180deg, rgba(15,23,42,0) 0%, #0f172a 20%);
+      padding: 16px;
+      border-top: 1px solid #1f2937;
+    }
     .row { display: grid; grid-template-columns: 160px 1fr 110px; gap: 10px; }
-    input, textarea, button { background: #0b1220; color: #e2e8f0; border: 1px solid #233a66; border-radius: 12px; padding: 10px 12px; outline: none; }
+    input, textarea, button {
+      background: #0b1220; color: #e2e8f0; border: 1px solid #233a66; border-radius: 12px;
+      padding: 10px 12px; outline: none;
+    }
     button { cursor: pointer; }
     .hint { font-size: 12px; opacity: .8; margin-top: 8px; }
-    @media (max-width: 640px) { .row { grid-template-columns: 1fr 80px; } #user { display: none; } }
+
+    @media (max-width: 640px) {
+      .row { grid-template-columns: 1fr 80px; }
+      #user { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -30,7 +51,10 @@
   </div>
   <div class="wrap">
     <div class="container">
-      <div id="chat" class="chat-area"></div>
+      <div id="chat" class="chat-area">
+        <!-- messages go here -->
+      </div>
+
       <div class="input-bar">
         <div class="row">
           <input id="user" placeholder="username (contoh: gilang)" value="gilang"/>
@@ -43,6 +67,7 @@
       </div>
     </div>
   </div>
+
   <script>
     const chat = document.getElementById('chat');
     const userEl = document.getElementById('user');
