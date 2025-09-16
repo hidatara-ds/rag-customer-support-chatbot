@@ -1,35 +1,57 @@
-Customer Support Chatbot Project Setup (FastAPI + Local LLM)
+# Shoe Store Support Chatbot
 
-This document outlines the initial setup for a customer support chatbot project, using FastAPI (Python 3.11) and a local LLM model (llama3.2:3B) run via Ollama. The project is structured based on principles from the ai-task-analyst repository and fulfills the requirements (from the PT Synapsis challenge) for answering at least three types of questions: order status, product advantages, and warranty claims. It also implements conversation memory, a simple tool-calling mechanism, and is containerized with Docker for deployment.
+A FastAPI-based customer support chatbot grounded by a MySQL/SQLite catalog.
+It answers about products, sizes, per-size stock, categories, brands, price lists,
+order status, and warranty. LLM is served by Ollama (Llama 3).
 
-Project Structure
+## Features
+- RAG-first: database answers are always preferred over LLM generations.
+- Product catalog with realistic data (16+ SKUs) and **per-size stock** (`product_sizes`).
+- Intents: category listing, brand listing, price list, product details, size availability,
+  per-size stock, alternatives, order status, and warranty.
+- Simple web UI (static) with fixed input at the bottom (mobile-friendly).
+- Configurable via environment variables.
 
-The project follows a modular structure, separating concerns for clarity and maintainability. Below is an example folder tree:
+## Quickstart (Docker)
+```bash
+docker compose up --build
+# API: http://localhost:8000
+# UI : http://localhost:8000/web
+```
 
-customer-support-chatbot/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # FastAPI application initialization and routes
-│   ├── db.py            # Database connection and helper functions (SQLite usage)
-│   ├── llm.py           # LLM integration (Ollama client or LangChain interface)
-│   └── utils.py         # Tool functions (e.g., check order status, fetch product info)
-├── data/
-│   └── database.sql     # SQL script for database schema and dummy data
-├── Dockerfile           # Dockerfile for containerizing the app
-└── README.md            # Documentation in English
+## Local
 
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export DATABASE_URL=sqlite:///./data/shoe_support.db
+export OLLAMA_HOST=http://127.0.0.1:11434
+export OLLAMA_MODEL=llama3.2:3b
+uvicorn app.main:app --reload
+```
 
-app/main.py: Creates the FastAPI app and defines REST endpoints (e.g., a /chat endpoint for chatbot interaction).
+## API
 
-app/db.py: Manages the SQL database connection. For simplicity, using SQLite with Python's sqlite3 or an ORM (like SQLAlchemy) to execute queries and store conversation history.
+POST /chat → { "user": "gilang", "message": "Ukuran 42 untuk Ultraboost 22 ada berapa?" }
 
-app/llm.py: Handles calls to the local LLM. It could use the Ollama REST API or a LangChain wrapper to generate responses from the llama3.2:3B model.
+GET /products → list products
 
-app/utils.py: Contains utility functions, including tool functions such as checking order status by querying the orders table (to demonstrate tool calling capability).
+GET /orders/{user} → latest order for a user
 
-data/database.sql: SQL script to set up the initial database schema (products, orders, conversations tables) with some dummy data for a coffee store scenario.
+GET /health → basic healthcheck
 
-Dockerfile: Instructions to build a Docker image with the FastAPI app and its dependencies (running on Uvicorn). This enables easy deployment in a container environment (single-container deployment without Compose).
+## Structure
+```bash
+app/
+  main.py       # routing + tool-first intent
+  db.py         # SQLAlchemy + RAG queries
+  models.py     # Product, ProductSize, Order, Conversation
+  utils.py      # intent detectors + tool answer formatters
+  llm.py        # Ollama client
+frontend/       # static UI
+data/           # optional SQL seeds
+```
 
-README.md: Documentation covering installation, setup, and usage instructions, as well as explanations of the system design (as required by the challenge).
+## Testing
 
+Run pytest (TBD). See tests/ folder.

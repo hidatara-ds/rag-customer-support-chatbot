@@ -1,14 +1,23 @@
 import re
-from typing import List, Optional
+from typing import List, Optional, Iterable
 from .models import Conversation, Order, Product
+from .config import MAX_HISTORY_MESSAGES
 
 # Tangkap "order #123" atau "pesanan 123"
 ORDER_PAT = re.compile(r"(?:order|pesanan)\s*#?\s*(\d+)", re.IGNORECASE)
-PRODUCT_PAT = re.compile(r"(espresso|latte|cold\s*brew)", re.IGNORECASE)
+# Heuristik sederhana: tangkap frasa alfanumerik yang sering jadi nama produk (kata dan angka)
+PRODUCT_PAT = re.compile(r"([a-zA-Z]+(?:\s+[a-zA-Z0-9']+){0,3})", re.IGNORECASE)
+CATEGORY_PAT = re.compile(r"\b(running|casual|basketball|skate|hiking|training)\b", re.IGNORECASE)
+BRAND_PAT = re.compile(r"\b(Nike|Adidas|Converse|Vans|Reebok|Salomon|New\s*Balance)\b", re.IGNORECASE)
+SIZE_NUM_PAT = re.compile(r"\b(?:size|ukuran)\s*(\d{2})\b", re.IGNORECASE)
 
 def is_order_status_query(text: str) -> bool:
     keys = ["where is my order", "order status", "status pesanan", "dimana pesanan", "pesanan saya", "cek pesanan"]
     return any(k in text.lower() for k in keys) or bool(ORDER_PAT.search(text))
+
+def is_category_list_query(t: str) -> bool:
+    keys = ["kategori", "jenis sepatu", "tipe sepatu", "category list", "daftar kategori"]
+    return any(k in t.lower() for k in keys)
 
 def is_category_inventory_query(t:str)->bool:
     return bool(CATEGORY_PAT.search(t)) and any(k in t.lower() for k in ["ada apa","apa saja","daftar","list"])
@@ -69,16 +78,12 @@ def extract_size_num(t:str)->Optional[int]:
         except: return None
     return None
 
-def is_product_query(text: str) -> bool:
-    keys = ["kelebihan", "fitur", "advantages", "what is", "tell me about", "product"]
-    return any(k in text.lower() for k in keys) or bool(PRODUCT_PAT.search(text))
-
 def extract_product_name(text: str) -> Optional[str]:
     m = PRODUCT_PAT.search(text)
     return m.group(1) if m else None
 
 def is_warranty_query(text: str) -> bool:
-    keys = ["warranty", "garansi", "klaim garansi", "claim warranty"]
+    keys = ["warranty", "garansi", "klaim garansi", "claim warranty", "retur", "pengembalian"]
     return any(k in text.lower() for k in keys)
 
 def tool_answer_order(order: Optional[Order]) -> str:
@@ -93,6 +98,45 @@ def tool_answer_product(p: Optional[Product]) -> str:
     return (f"{p.name} ({p.brand}, {p.category}) — {p.description} "
             f"Harga: ${p.price:.2f}. Ukuran ready: {p.sizes}. Stok total: {p.stock_total} pasang.")
 
+def tool_answer_categories(cats: List[str]) -> str:
+    if not cats:
+        return "Saat ini belum ada kategori terdaftar."
+    return "Kategori yang tersedia: " + ", ".join(sorted(set(c.title() for c in cats))) + "."
+
+def tool_answer_pricelist(rows: List[tuple], cat: Optional[str]) -> str:
+    if not rows:
+        return "Belum ada data harga untuk permintaan tersebut."
+    title = f"Daftar harga{f' kategori {cat}' if cat else ''}:"
+    lines = [title]
+    for name, price in rows:
+        lines.append(f"- {name}: ${price:.2f}")
+    return "\n".join(lines)
+
+def tool_answer_size_stock_exact(p: Optional[Product], size: Optional[int], exact: Optional[int]) -> str:
+    if not p or not size:
+        return "Sebutkan nama produk dan ukuran yang ingin dicek ya."
+    if exact is None:
+        return f"Data stok ukuran {size} untuk {p.name} belum tersedia."
+    return f"Stok {p.name} ukuran {size}: {exact} pasang."
+
+def tool_answer_other_products(current_name: Optional[str], others: List[str]) -> str:
+    base = f"Selain {current_name}, " if current_name else ""
+    if not others:
+        return base + "saya belum menemukan rekomendasi lain saat ini."
+    return base + "mungkin Anda tertarik dengan: " + ", ".join(others) + "."
+
+def tool_answer_list(title: str, prods: Iterable[Product]) -> str:
+    items = list(prods)
+    if not items:
+        return f"{title}: (kosong)"
+    lines = [title + ":"]
+    for p in items:
+        try:
+            lines.append(f"- {p.name} (${p.price:.2f}) — {p.brand}/{p.category}")
+        except Exception:
+            lines.append(f"- {getattr(p, 'name', str(p))}")
+    return "\n".join(lines)
+
 def tool_answer_warranty() -> str:
     return (
         "Our products include a **1-year limited warranty**. "
@@ -101,15 +145,11 @@ def tool_answer_warranty() -> str:
     )
 
 def format_history_for_prompt(history: List[Conversation]) -> str:
-    """
-    Ambil N interaksi (Q/A). Default MEMORY_TURNS = 3 (=> 6 pesan max).
-    Pastikan urut kronologis.
-    """
     if not history:
         return ""
-    lines = []
-    # history sudah kronologis
-    selected = history[-(MEMORY_TURNS*2):]  # kira-kira 3 Q/A = 6 messages
+    # Batasi sesuai MAX_HISTORY_MESSAGES (total user+assistant)
+    selected = history[-MAX_HISTORY_MESSAGES:]
+    lines: List[str] = []
     for msg in selected:
         role = "User" if msg.role == "user" else "Assistant"
         lines.append(f"{role}: {msg.message}")
@@ -117,10 +157,10 @@ def format_history_for_prompt(history: List[Conversation]) -> str:
 
 def build_prompt(history_block: str, user_message: str, tool_context: Optional[str]) -> str:
     sys = (
-        "You are a helpful customer support assistant for an online coffee store. "
-        "Answer concisely and accurately. If a tool result is provided, prefer it over assumptions."
+        "Anda adalah asisten dukungan pelanggan untuk toko sepatu online. "
+        "Jawab singkat, akurat, dan prioritaskan data dari tool/katalog jika tersedia."
     )
-    tool = f"\nTOOL_INFO:\n{tool_context}" if tool_context else ""
+    tool = f"\nKATALOG/TOOL:\n{tool_context}" if tool_context else ""
     return f"{sys}\n\n{history_block}\nUser: {user_message}{tool}\nAssistant:"
 
 def tool_answer_sizes(p: Optional[Product]) -> str:
@@ -131,10 +171,7 @@ def tool_answer_sizes(p: Optional[Product]) -> str:
         from . import db
         # ambil semua size (urut)
         size_map = {}
-        for s in db.search_products_fuzzy(p.name)[:1]:  # ambil objek sama
-            pass
-        # gunakan helper langsung:
-        # (kita bikin helper baru di db.py kalau belum ada)
+        # Jika ada helper detail ukuran per produk di DB, gunakan.
     except Exception:
         size_map = {}
 
