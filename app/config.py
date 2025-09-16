@@ -1,13 +1,15 @@
 import os
 
-# --- Environment ---
-# MySQL contoh: mysql+pymysql://user:password@localhost:3306/coffee_support
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:password@localhost:3306/coffee_support")
+# DB:
+# - Untuk MySQL:  mysql+pymysql://user:password@127.0.0.1:3306/shoe_support
+# - Untuk SQLite: sqlite:///./data/shoe_support.db
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/shoe_support.db")
 
-# Ollama server (lokal)
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-# Model sesuai challenge
+# Ollama
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
-# Memory: jumlah interaksi (Q/A) yang diingat
-MEMORY_TURNS = int(os.getenv("MEMORY_TURNS", "3"))
+# Memory:
+# - Disimpan di DB: unlimited
+# - Yang dikirim ke LLM: batasi agar prompt tidak terlalu panjang (bisa diubah via env)
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "20"))  # total pesan (user+assistant)

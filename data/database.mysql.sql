@@ -1,8 +1,6 @@
--- Buat database
-CREATE DATABASE IF NOT EXISTS coffee_support CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE coffee_support;
+CREATE DATABASE IF NOT EXISTS shoe_support CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE shoe_support;
 
--- Tabel
 CREATE TABLE IF NOT EXISTS products (
   product_id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) UNIQUE,
@@ -21,20 +19,20 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS conversations (
   convo_id INT AUTO_INCREMENT PRIMARY KEY,
   user_name VARCHAR(100),
-  role VARCHAR(20), -- 'user' or 'assistant'
+  role VARCHAR(20),
   message TEXT,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Produk kopi dummy
 INSERT INTO products (name, description, price) VALUES
-('Espresso', 'Strong and rich coffee shot', 2.50),
-('Latte', 'Espresso with steamed milk and light foam', 3.50),
-('Cold Brew', 'Smooth cold brewed coffee, less acidic', 3.00)
+('Air Max 90', 'Classic running sneakers with visible Air cushioning and durable leather/mesh upper.', 120.00),
+('Ultraboost 22', 'High-comfort running shoes with responsive Boost midsole and Primeknit upper.', 180.00),
+('Chuck Taylor All Star', 'Iconic canvas sneakers with rubber toe cap and timeless street style.', 65.00),
+('Vans Old Skool', 'Skate-inspired shoes with signature side stripe and sturdy suede/canvas build.', 70.00)
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
--- Pesanan dummy
 INSERT INTO orders (user_name, product_id, status) VALUES
-('alice', 1, 'shipped'),
-('bob',   2, 'delivered'),
-('alice', 3, 'pending');
+('gilang', (SELECT product_id FROM products WHERE name='Air Max 90'), 'processing'),
+('sela',   (SELECT product_id FROM products WHERE name='Ultraboost 22'), 'shipped'),
+('gilang', (SELECT product_id FROM products WHERE name='Chuck Taylor All Star'), 'delivered'),
+('ayu',    (SELECT product_id FROM products WHERE name='Vans Old Skool'), 'pending');

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 class ChatRequest(BaseModel):
-    user: str = Field(..., examples=["alice"])
+    user: str = Field(..., examples=["gilang"])
     message: str = Field(..., examples=["Where is my order?"])
 
 class ChatResponse(BaseModel):
