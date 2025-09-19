@@ -1,79 +1,129 @@
-# Shoe Store Support Chatbot
+# Customer Support Chatbot Project
 
-Chatbot dukungan pelanggan berbasis FastAPI dengan katalog MySQL/SQLite. Menjawab pertanyaan seputar produk, ukuran, stok per-ukuran, kategori, brand, daftar harga, status pesanan, dan garansi. LLM disajikan via Ollama (Llama 3).
+Chatbot dukungan pelanggan untuk toko sepatu yang berjalan lokal dengan FastAPI + Ollama. Proyek ini menyimpan riwayat percakapan di database dan menyediakan REST API yang dapat diintegrasikan dengan aplikasi lain.
+
+## 1. Cara Instalasi & Requirement pada Environment Local
+- Python 3.11 (disarankan) dan virtual environment
+  - macOS/Linux: `python -m venv .venv && source .venv/bin/activate`
+  - Windows (PowerShell): `python -m venv .venv; .\\.venv\\Scripts\\Activate.ps1`
+- Clone repository
+  ```bash
+  git clone <your-repo-url>
+  cd Customer-Support-Chatbot-Project
+  ```
+- Instal dependensi
+  ```bash
+  pip install -r requirements.txt
+  ```
+- Instal Ollama dan model LLM lokal
+  - Install Ollama: lihat dokumentasi resmi (`https://ollama.com`)
+  - Jalankan server: `ollama serve`
+  - Pull model: `ollama pull llama3.2:3b`
+- Setup database
+  - Default: SQLite (otomatis dibuat dan di-seed saat pertama kali jalan)
+  - Opsional: MySQL (set ENV `DATABASE_URL`, contoh `mysql+pymysql://root:root@127.0.0.1:3306/shoe_support`)
+- Jalankan aplikasi (REST API di localhost)
+  ```bash
+  uvicorn app.main:app --reload
+  # API     : http://localhost:8000
+  # Docs    : http://localhost:8000/docs (Swagger UI untuk test API)
+  # OpenAPI : http://localhost:8000/openapi.json (spec JSON untuk BE/FE)
+  # Web UI  : http://localhost:8000/web
+  ```
+- Opsional (nilai tambah): Docker
+  ```bash
+  docker compose up --build
+  # Services: api + db (MySQL 8) + ollama
+  ```
+
+## 2. Desain Database
+Tujuan: menyimpan history chat agar konteks percakapan dapat dipakai ulang oleh LLM.
+
+- Tabel yang diminta challenge: `chat_history`
+  - Kolom: `id` (primary key), `user_message`, `bot_response`, `timestamp`
+
+Contoh SQL schema:
+```sql
+CREATE TABLE IF NOT EXISTS chat_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_message TEXT NOT NULL,
+  bot_response TEXT NOT NULL,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+Catatan: Implementasi pada repo ini sudah menyimpan percakapan ke tabel `conversations` (dengan peran user/assistant) dan juga memiliki tabel katalog (`products`, `product_sizes`) serta pesanan (`orders`).
+
+## 3. List Library dan Framework yang Digunakan
+- FastAPI: REST API
+- Uvicorn: ASGI server
+- SQLAlchemy: ORM/database access
+- PyMySQL: driver MySQL (opsional)
+- Pydantic: schema request/response
+- Requests: HTTP client (memanggil Ollama API)
+- python-dotenv: memuat variabel lingkungan
+- cryptography: dukungan auth MySQL modern
+- Ollama: runtime LLM lokal
+
+(Sesuai `requirements.txt`.)
+
+## 4. Model LLM yang Digunakan
+- Llama 3.2 (3B) via Ollama (berjalan lokal)
+- Alasan: ringan, open-source, dan memenuhi syarat challenge untuk LLM lokal
+
+## 5. Daftar Pertanyaan yang Dapat Dijawab
+- Status pesanan
+  - Contoh: "Dimana pesanan saya?", "status pesanan sela", "cek order #12"
+- Informasi produk
+  - Contoh: "Apa kelebihan Air Max 90?", "detail Ultraboost 22"
+- Ketersediaan ukuran & stok per-ukuran
+  - Contoh: "Ultraboost 22 ukuran 42 stoknya berapa?", "ukuran apa saja yang ready?"
+- Kebijakan garansi
+  - Contoh: "Bagaimana cara saya meng-claim garansi?"
+- Catatan: dapat diperluas untuk pertanyaan lain sesuai kebutuhan.
+
+Pengguna demo (seed) untuk cek pesanan: `adit`, `sela`, `gilang`. Saat menguji status/delivery pesanan, set field `user` pada payload sesuai nama tersebut.
+
+## 6. Daftar Tool Call yang Dapat Dilakukan
+- Order Status Lookup
+  - Chatbot memanggil fungsi eksternal untuk mengecek status pesanan berdasarkan intent (regex) dan/atau `order_id` yang diekstrak dari pesan. Jika `order_id` tidak ada, sistem memakai pesanan terakhir milik `user` pada payload.
+  - Output status standar: `processing`, `shipped`, `delivered`, beserta nama produk.
+  - Contoh payload:
+    ```json
+    { "user": "sela", "message": "status pesanan" }
+    ```
+- Catalog Lookup (bisa diperluas)
+  - Detail produk, ukuran ready, stok per-ukuran.
+- Warranty Info (bisa diperluas)
+  - Mengembalikan teks kebijakan garansi tetap.
+
+Tambahan: Dok Swagger di `http://localhost:8000/docs` dapat dipakai untuk pengujian endpoint interaktif, dan spesifikasi OpenAPI JSON tersedia di `http://localhost:8000/openapi.json` untuk kebutuhan integrasi BE/FE (generate client atau import ke Postman/Insomnia).
+
+## Endpoint & Docs Singkat
+- Endpoint: `GET /health`, `GET /products`, `GET /orders/{user}`, `POST /chat`
+- Docs: `http://localhost:8000/docs` (uji interaktif), OpenAPI: `/openapi.json`
+- UI: `http://localhost:8000/web`
 
 ## Fitur
-- **RAG-first**: jawaban dari database diutamakan, LLM sebagai fallback.
-- **Katalog realistis** (16+ SKU) dengan stok per-ukuran lewat tabel `product_sizes`.
-- **Intent siap pakai**: kategori, brand, price list, detail produk, ketersediaan ukuran, stok per-ukuran, rekomendasi/alternatif, status pesanan, garansi.
-- **UI web sederhana** (static) di route `/web`, ramah mobile.
-- **Konfigurasi via ENV**: database, model LLM, batas riwayat percakapan.
+- Fokus RAG: data katalog dari DB, LLM sebagai pelengkap.
+- UI web sederhana di `/web`, konfigurasi via ENV.
+- Intent siap pakai: status pesanan, info produk, ukuran/stok, garansi.
 
 ## Struktur Folder
 ```bash
-app/
-  main.py       # routing FastAPI + flow intent/tool-first
-  db.py         # SQLAlchemy engine, seed data, dan query RAG
-  models.py     # ORM: Product, ProductSize, Order, Conversation
-  utils.py      # deteksi intent, ekstraktor, formatter jawaban tool
-  schemas.py    # Pydantic schema untuk request/response
-  config.py     # pembacaan variabel lingkungan (ENV)
-  llm.py        # klien Ollama (HTTP generate)
-frontend/
-  index.html    # UI chat static
-data/
-  shoe_support.db      # SQLite (opsional, otomatis dibuat/di-seed)
-  database.mysql.sql   # contoh SQL (opsional)
-Dockerfile
-docker-compose.yml
-requirements.txt
-README.md
-LICENSE
+app/ (main.py, db.py, models.py, utils.py, schemas.py, config.py, llm.py)
+frontend/ (index.html)
+data/ (database.mysql.sql)
+Dockerfile, docker-compose.yml, requirements.txt, LICENSE
 ```
 
-## Persyaratan
-- Python 3.11+
-- Ollama (lokal atau container) dengan model `llama3.2:3b` atau setara
-- MySQL 8 (opsional; default menggunakan SQLite)
+## Persyaratan & ENV Singkat
+- Python 3.11+, Ollama (model `llama3.2:3b`), SQLite (default) / MySQL (opsional)
+- ENV utama: `DATABASE_URL`, `OLLAMA_HOST`, `OLLAMA_MODEL`, `MAX_HISTORY_MESSAGES`
 
-## Variabel Lingkungan (ENV)
-- `DATABASE_URL` (default: `sqlite:///./data/shoe_support.db`)
-  - Contoh MySQL: `mysql+pymysql://root:root@127.0.0.1:3306/shoe_support`
-- `OLLAMA_HOST` (default: `http://127.0.0.1:11434`)
-- `OLLAMA_MODEL` (default: `llama3.2:3b`)
-- `MAX_HISTORY_MESSAGES` (default: `30`) — jumlah total pesan (user+assistant) yang dikirim ke LLM.
-
-## Menjalankan dengan Docker (Disarankan)
-```bash
-docker compose up --build
-# API: http://localhost:8000
-# UI : http://localhost:8000/web
-```
-`docker-compose.yml` menyertakan 3 service: `db` (MySQL 8), `api` (FastAPI), `ollama` (server LLM). API menunggu DB sehat dan Ollama start.
-
-## Menjalankan Lokal (Tanpa Docker)
-### macOS/Linux (bash/zsh)
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export DATABASE_URL=sqlite:///./data/shoe_support.db
-export OLLAMA_HOST=http://127.0.0.1:11434
-export OLLAMA_MODEL=llama3.2:3b
-uvicorn app.main:app --reload
-```
-
-### Windows (PowerShell)
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:DATABASE_URL = "sqlite:///./data/shoe_support.db"
-$env:OLLAMA_HOST = "http://127.0.0.1:11434"
-$env:OLLAMA_MODEL = "llama3.2:3b"
-uvicorn app.main:app --reload
-```
-
-Catatan: Saat pertama kali start, tabel dan data contoh akan otomatis dibuat/di-seed (jika kosong).
+## Cara Menjalankan Singkat
+- Lokal: `uvicorn app.main:app --reload`
+- Docker: `docker compose up --build`
+- Lihat detail langkah di bagian 1 (Instalasi)
 
 ## Endpoint API
 - `GET /health` → kesehatan sederhana
@@ -127,25 +177,16 @@ curl -s http://localhost:8000/openapi.json | jq '.info, .paths["/chat"]'
 - Jika tidak terjawab oleh tool, prompt gabungan (riwayat + konteks tool) dikirim ke Ollama via `app/llm.py`.
 - Riwayat percakapan disimpan ke tabel `conversations`; jumlah yang dikirim ke LLM dibatasi `MAX_HISTORY_MESSAGES`.
 
-## Fungsi Tool (Deterministic)
-Tool dipanggil berdasarkan pola intent tertentu agar jawaban faktual selalu berasal dari database. Jika pertanyaan bersifat umum (bisa dijawab tanpa data presisi), model akan menjawab langsung tanpa tool.
+## Fungsi Tool (Ringkas)
+- Order Status Lookup: cek status berdasarkan `order_id` atau pesanan terakhir milik `user`.
+- Catalog Lookup: detail produk, ukuran ready, stok per-ukuran.
+- Warranty Info: teks kebijakan garansi tetap.
 
-- **OrderStatusChecker** — cek status pesanan (termasuk yang sudah dikirim/diantar)
-  - Input:
-    - `order_id` (opsional; contoh: `order #12` atau `pesanan #12`)
-    - Jika `order_id` tidak ada, sistem cek pesanan terbaru berdasarkan `user` pada payload request
-  - Output: status standar, mis. `processing`, `shipped`, `delivered` beserta label produk
-  - Contoh prompt: "cek pesanan gilang", "status pesanan", "dimana pesanan saya?", "cek order #12"
-
-- **CatalogLookup** — informasi produk, ukuran ready, stok per-ukuran
-  - Varian:
-    - Detail produk: nama/brand/kategori/deskripsi/harga/ukuran-ready
-    - Ukuran tersedia: daftar ukuran yang ready untuk sebuah produk
-    - Stok spesifik ukuran: stok exact untuk produk dan ukuran tertentu
-  - Contoh prompt: "detail Air Max 90", "ukuran apa saja yang ready untuk Ultraboost 22?", "Ultraboost 22 ukuran 42 stoknya berapa?"
-
-- **WarrantyInfo** — kebijakan garansi (teks tetap)
-  - 1 tahun untuk cacat pabrik; ajukan via chat/email `support@shoestore.test` dengan nomor pesanan + bukti pembelian
+Contoh payload uji status pesanan:
+```json
+{ "user": "sela", "message": "status pesanan" }
+```
+Pengguna demo: `adit`, `sela`, `gilang`.
 
 ### Kapan Tool Dipakai
 - Pertanyaan yang butuh data presisi: status pesanan, stok per-ukuran, ketersediaan ukuran, daftar harga, filter kategori/brand/ukuran → tool dipanggil.
