@@ -101,6 +101,17 @@ curl -s http://localhost:8000/chat \
   -d '{"user":"gilang","message":"Jenis sepatu apa saja?"}'
 ```
 
+## Dokumentasi API (Swagger / OpenAPI)
+- Buka `http://localhost:8000/docs` untuk mencoba endpoint secara interaktif (Swagger UI). Anda dapat mengisi body request, menekan tombol "Execute", dan melihat response langsung.
+- Spesifikasi OpenAPI tersedia di `http://localhost:8000/openapi.json`. Ini berguna untuk:
+  - Integrasi BE/FE (generate client dengan tool seperti `openapi-generator`/`swagger-codegen`)
+  - Import ke Postman/Insomnia untuk koleksi request otomatis
+
+Contoh mengambil OpenAPI JSON:
+```bash
+curl -s http://localhost:8000/openapi.json | jq '.info, .paths["/chat"]'
+```
+
 ## UI Web
 - Akses `http://localhost:8000/web`
 - Input tetap di bawah layar, cocok untuk mobile
@@ -115,6 +126,66 @@ curl -s http://localhost:8000/chat \
 - Query katalog/stock di `app/db.py` (SQLAlchemy). Jawaban tool (database) diformat lalu diprioritaskan.
 - Jika tidak terjawab oleh tool, prompt gabungan (riwayat + konteks tool) dikirim ke Ollama via `app/llm.py`.
 - Riwayat percakapan disimpan ke tabel `conversations`; jumlah yang dikirim ke LLM dibatasi `MAX_HISTORY_MESSAGES`.
+
+## Fungsi Tool (Deterministic)
+Tool dipanggil berdasarkan pola intent tertentu agar jawaban faktual selalu berasal dari database. Jika pertanyaan bersifat umum (bisa dijawab tanpa data presisi), model akan menjawab langsung tanpa tool.
+
+- **OrderStatusChecker** — cek status pesanan (termasuk yang sudah dikirim/diantar)
+  - Input:
+    - `order_id` (opsional; contoh: `order #12` atau `pesanan #12`)
+    - Jika `order_id` tidak ada, sistem cek pesanan terbaru berdasarkan `user` pada payload request
+  - Output: status standar, mis. `processing`, `shipped`, `delivered` beserta label produk
+  - Contoh prompt: "cek pesanan gilang", "status pesanan", "dimana pesanan saya?", "cek order #12"
+
+- **CatalogLookup** — informasi produk, ukuran ready, stok per-ukuran
+  - Varian:
+    - Detail produk: nama/brand/kategori/deskripsi/harga/ukuran-ready
+    - Ukuran tersedia: daftar ukuran yang ready untuk sebuah produk
+    - Stok spesifik ukuran: stok exact untuk produk dan ukuran tertentu
+  - Contoh prompt: "detail Air Max 90", "ukuran apa saja yang ready untuk Ultraboost 22?", "Ultraboost 22 ukuran 42 stoknya berapa?"
+
+- **WarrantyInfo** — kebijakan garansi (teks tetap)
+  - 1 tahun untuk cacat pabrik; ajukan via chat/email `support@shoestore.test` dengan nomor pesanan + bukti pembelian
+
+### Kapan Tool Dipakai
+- Pertanyaan yang butuh data presisi: status pesanan, stok per-ukuran, ketersediaan ukuran, daftar harga, filter kategori/brand/ukuran → tool dipanggil.
+- Pertanyaan umum (cara pilih ukuran, perawatan, saran model kasual) → dijawab langsung oleh LLM (Bahasa Indonesia, ringkas, empatik), tanpa mengarang angka.
+
+### Pengguna Demo (Seed) untuk Cek Pesanan
+Tersedia user contoh: `adit`, `sela`, `gilang`. Untuk mengecek status/delivery pesanan, set kolom `user` pada payload sesuai nama user tersebut.
+
+Contoh:
+```bash
+curl -s http://localhost:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user":"adit","message":"cek pesanan saya"}'
+
+curl -s http://localhost:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user":"sela","message":"status pesanan"}'
+
+# Atau langsung by order id (user bisa apa saja):
+curl -s http://localhost:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user":"gilang","message":"cek pesanan saya"}'
+```
+
+Endpoint bantu:
+- `GET /orders/{user}` → ambil pesanan terakhir untuk `adit|sela|gilang`.
+
+### Contoh Interaksi
+```json
+POST /chat
+{
+  "user": "gilang",
+  "message": "Ultraboost 22 ukuran 42 stoknya berapa?"
+}
+
+Response:
+{
+  "answer": "Stok Ultraboost 22 ukuran 42: 4 pasang. Mau dibantu cek warna atau ada alternatif serupa?"
+}
+```
 
 ## Pengembangan
 - Versi API: lihat `app/main.py` → `FastAPI(..., version="1.5.0")`.
