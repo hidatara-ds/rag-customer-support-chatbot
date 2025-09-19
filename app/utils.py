@@ -33,15 +33,50 @@ def is_warranty_query(t: str) -> bool:
     keys = ["warranty", "garansi", "klaim garansi", "claim warranty", "retur", "pengembalian"]
     return any(k in t.lower() for k in keys)
 
-# ---------- INTENT nonaktif (biarkan LLM berpikir) ----------
-def is_category_list_query(_: str) -> bool:            return False
-def is_category_inventory_query(_: str) -> bool:       return False
-def is_category_size_inventory_query(_: str) -> bool:  return False
-def is_size_inventory_query(_: str) -> bool:           return False
-def is_brand_inventory_query(_: str) -> bool:          return False
-def is_price_query(_: str) -> bool:                    return False
-def is_other_products_query(_: str) -> bool:           return False
-def is_product_query(_: str) -> bool:                  return False
+# ---------- INTENT aktif (menggunakan data DB/RAG) ----------
+def is_category_list_query(t: str) -> bool:
+    keys = [
+        "kategori apa saja",
+        "jenis sepatu apa saja",
+        "ada jenis",
+        "list kategori",
+        "daftar kategori",
+        "kategori yang tersedia",
+    ]
+    return any(k in t.lower() for k in keys)
+
+def is_category_inventory_query(t: str) -> bool:
+    # contoh: "kategori running ada apa", "sepatu hiking apa saja"
+    has_cat = CATEGORY_PAT.search(t) is not None
+    keys = ["ada apa", "apa saja", "pilihan", "rekomendasi", "list"]
+    return has_cat and any(k in t.lower() for k in keys)
+
+def is_category_size_inventory_query(t: str) -> bool:
+    return CATEGORY_PAT.search(t) is not None and SIZE_NUM_PAT.search(t) is not None
+
+def is_size_inventory_query(t: str) -> bool:
+    # contoh: "ukuran 42 ada apa"
+    has_size = SIZE_NUM_PAT.search(t) is not None
+    keys = ["ada apa", "apa saja", "pilihan", "rekomendasi", "list"]
+    return has_size and any(k in t.lower() for k in keys)
+
+def is_brand_inventory_query(t: str) -> bool:
+    return BRAND_PAT.search(t) is not None and any(
+        k in t.lower() for k in ["ada apa", "apa saja", "list", "pilihan", "rekomendasi"]
+    )
+
+def is_price_query(t: str) -> bool:
+    keys = ["price list", "pricelist", "daftar harga", "price", "harga kategori"]
+    return any(k in t.lower() for k in keys)
+
+def is_other_products_query(t: str) -> bool:
+    keys = ["alternatif", "yang mirip", "lainnya", "rekomendasi lain", "opsi lain"]
+    return any(k in t.lower() for k in keys)
+
+def is_product_query(t: str) -> bool:
+    # heuristik ringan: ada frasa info/tentang/detail + ada kandidat nama produk
+    keys = ["detail", "tentang", "info", "spesifikasi", "deskripsi"]
+    return any(k in t.lower() for k in keys) and PRODUCT_PAT.search(t) is not None
 
 # ---------- EXTRACTORS minimal ----------
 def extract_order_id(t: str) -> Optional[int]:
@@ -106,10 +141,23 @@ def tool_answer_order(order) -> str:
     prod = getattr(getattr(order, "product", None), "name", "produk Anda")
     return f"Pesanan #{order.order_id} ({prod}) saat ini berstatus {order.status}."
 
-def tool_answer_categories(_: List[str]) -> str:
-    return "Kategori akan saya sampaikan jika diperlukan."
-def tool_answer_pricelist(_: List[tuple], __: Optional[str]) -> str:
-    return "Daftar harga akan saya sampaikan jika diperlukan."
+def tool_answer_categories(cats: List[str]) -> str:
+    if not cats:
+        return "Saat ini belum ada kategori di katalog."
+    cats_sorted = sorted(set(c.title() for c in cats))
+    return "Kategori yang tersedia: " + ", ".join(cats_sorted) + "."
+
+def tool_answer_pricelist(rows: List[tuple], cat: Optional[str]) -> str:
+    if not rows:
+        base = f"kategori {cat}" if cat else "semua kategori"
+        return f"Belum ada data harga untuk {base}."
+    header = f"Daftar harga{' kategori ' + cat if cat else ''}:"
+    lines = [header]
+    for name, price in rows[:12]:
+        lines.append(f"- {name} — ${float(price):.2f}")
+    if len(rows) > 12:
+        lines.append(f"(dan {len(rows) - 12} item lainnya)")
+    return "\n".join(lines)
 def tool_answer_other_products(current_name: Optional[str], others: List[str]) -> str:
     if not others: return "Saat ini belum ada rekomendasi lain."
     base = f"Selain {current_name}, " if current_name else ""
@@ -147,3 +195,4 @@ def build_prompt(history_block: str, user_message: str, tool_context: Optional[s
            "tanpa mengarang angka. Akhiri dengan 1 tindak lanjut singkat.")
     tool = f"\nTOOL_INFO (jangan ubah faktanya):\n{tool_context}" if tool_context else ""
     return f"{sys}\n\n{_FEW_SHOTS}\n\n{history_block}\nUser: {user_message}{tool}\nAssistant:"
+    
