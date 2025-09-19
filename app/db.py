@@ -217,7 +217,7 @@ def seed_if_empty() -> None:
             ultrab = s.scalar(select(Product).where(Product.name == "Ultraboost 22"))
             s.add_all(
                 [
-                    Order(user_name="gilang", product_id=airmax.product_id, status="processing"),
+                    Order(user_name="adit", product_id=airmax.product_id, status="processing"),
                     Order(user_name="sela", product_id=ultrab.product_id, status="shipped"),
                     Order(user_name="gilang", product_id=chuck.product_id, status="delivered"),
                 ]
