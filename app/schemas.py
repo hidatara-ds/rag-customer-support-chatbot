@@ -1,9 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 
 class ChatRequest(BaseModel):
-    user: str = Field(..., examples=["alice"])
-    message: str = Field(..., examples=["Where is my order?"])
+    user: str = Field(..., min_length=1, max_length=100, examples=["alice"])
+    message: str = Field(..., min_length=1, max_length=1000, examples=["Where is my order?"])
 
 class ChatResponse(BaseModel):
     answer: str
@@ -19,3 +19,8 @@ class OrderOut(BaseModel):
     user_name: str
     product_name: str
     status: str
+
+class HealthResponse(BaseModel):
+    status: str
+    database: str
+    version: str
