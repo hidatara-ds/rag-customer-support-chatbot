@@ -1,15 +1,21 @@
 import os
+from dotenv import load_dotenv
 
-# DB:
-# - Untuk MySQL:  mysql+pymysql://user:password@127.0.0.1:3306/shoe_support
-# - Untuk SQLite: sqlite:///./data/shoe_support.db
+# Load environment variables from .env file
+load_dotenv()
+
+# Database Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/shoe_support.db")
 
-# Ollama
+# Ollama Configuration
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
-# Memory:
-# - Disimpan di DB: unlimited
-# - Yang dikirim ke LLM: batasi agar prompt tidak terlalu panjang (bisa diubah via env)
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "30"))  # total pesan (user+assistant)
+# Application Configuration
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "6"))
+MEMORY_TURNS = MAX_HISTORY_MESSAGES // 2  # Number of Q&A pairs
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# API Configuration
+API_TITLE = os.getenv("API_TITLE", "Customer Support Chatbot")
+API_VERSION = os.getenv("API_VERSION", "1.5.0")

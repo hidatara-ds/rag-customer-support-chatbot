@@ -1,30 +1,32 @@
-# app/db.py
-from __future__ import annotations
-
-import time
+from typing import List, Optional
+from sqlalchemy import create_engine, select, desc
+from sqlalchemy.orm import sessionmaker
+from .models import Base, Product, Order, Conversation
+from .config import DATABASE_URL
 import logging
-from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import create_engine, desc, or_, select
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import joinedload, sessionmaker
-
-from .config import DATABASE_URL, MAX_HISTORY_MESSAGES
-from .models import Base, Conversation, Order, Product, ProductSize
-
-log = logging.getLogger(__name__)
-
-# ---- Engine & Session --------------------------------------------------------
-if DATABASE_URL.startswith("sqlite"):
-    # sqlite needs this for multi-threaded uvicorn
-    engine = create_engine(
-        DATABASE_URL, pool_pre_ping=True, connect_args={"check_same_thread": False}
-    )
-else:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+logger = logging.getLogger(__name__)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
+def init_db() -> None:
+    """Initialize database and create all tables"""
+    try:
+        Base.metadata.create_all(engine)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise
+
+def check_db_health() -> bool:
+    """Check if database connection is healthy"""
+    try:
+        with SessionLocal() as s:
+            s.execute(select(1))
+        return True
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        return False
 
 # ---- Init & Seed (with retry so we wait for MySQL to be ready) ---------------
 def init_db(retries: int = 15, delay: float = 2.0) -> None:
@@ -227,173 +229,77 @@ def seed_if_empty() -> None:
 
 # ---- Conversation history ----------------------------------------------------
 def save_message(user: str, role: str, message: str) -> None:
-    with SessionLocal() as s:
-        s.add(Conversation(user_name=user, role=role, message=message))
-        s.commit()
+    """Save a conversation message to database"""
+    try:
+        with SessionLocal() as s:
+            s.add(Conversation(user_name=user, role=role, message=message))
+            s.commit()
+            logger.debug(f"Saved {role} message for user {user}")
+    except Exception as e:
+        logger.error(f"Failed to save message: {e}")
+        raise
 
-
-def get_last_messages(user: str, limit: Optional[int] = None) -> List[Conversation]:
-    lim = limit or MAX_HISTORY_MESSAGES
-    with SessionLocal() as s:
-        stmt = (
-            select(Conversation)
-            .where(Conversation.user_name == user)
-            .order_by(desc(Conversation.timestamp))
-            .limit(lim)
-        )
-        rows = list(s.scalars(stmt))
-        return list(reversed(rows))
-
-
-# ---- Orders ------------------------------------------------------------------
-def get_order_by_id(order_id: Optional[int]) -> Optional[Order]:
-    if not order_id:
-        return None
-    with SessionLocal() as s:
-        return (
-            s.execute(
-                select(Order)
-                .options(joinedload(Order.product))
-                .where(Order.order_id == order_id)
-                .limit(1)
+def get_last_messages(user: str, limit: int = 6) -> List[Conversation]:
+    """
+    Get last N messages for a user (combined user+assistant messages).
+    Default 6 = 3 interactions (Q&A pairs).
+    Returns messages in chronological order.
+    """
+    try:
+        with SessionLocal() as s:
+            stmt = (
+                select(Conversation)
+                .where(Conversation.user_name == user)
+                .order_by(desc(Conversation.timestamp))
+                .limit(limit)
             )
-            .scalars()
-            .first()
-        )
-
+            rows = list(s.scalars(stmt))
+            return list(reversed(rows))  # chronological order
+    except Exception as e:
+        logger.error(f"Failed to get messages for user {user}: {e}")
+        return []
 
 def get_latest_order(user: str) -> Optional[Order]:
-    with SessionLocal() as s:
-        return (
-            s.execute(
+    """Get the most recent order for a user"""
+    try:
+        with SessionLocal() as s:
+            stmt = (
                 select(Order)
-                .options(joinedload(Order.product))
                 .where(Order.user_name == user)
                 .order_by(desc(Order.order_id))
                 .limit(1)
             )
-            .scalars()
-            .first()
-        )
+            return s.scalars(stmt).first()
+    except Exception as e:
+        logger.error(f"Failed to get latest order for user {user}: {e}")
+        return None
 
+def get_order_by_id(order_id: int) -> Optional[Order]:
+    """Get a specific order by ID"""
+    try:
+        with SessionLocal() as s:
+            stmt = select(Order).where(Order.order_id == order_id).limit(1)
+            return s.scalars(stmt).first()
+    except Exception as e:
+        logger.error(f"Failed to get order {order_id}: {e}")
+        return None
+
+def get_product_by_name(name: str) -> Optional[Product]:
+    """Get a product by name (case-insensitive)"""
+    try:
+        with SessionLocal() as s:
+            stmt = select(Product).where(Product.name.ilike(f"%{name}%")).limit(1)
+            return s.scalars(stmt).first()
+    except Exception as e:
+        logger.error(f"Failed to get product {name}: {e}")
+        return None
 
 # ---- Catalog queries (RAG) ---------------------------------------------------
 def list_products() -> List[Product]:
-    with SessionLocal() as s:
-        return list(s.scalars(select(Product).order_by(Product.name)))
-
-
-def list_categories() -> List[str]:
-    with SessionLocal() as s:
-        return list(s.scalars(select(Product.category).distinct().order_by(Product.category)))
-
-
-def list_price_list(cat: Optional[str] = None) -> List[Tuple[str, float]]:
-    with SessionLocal() as s:
-        stmt = select(Product.name, Product.price)
-        if cat:
-            stmt = stmt.where(Product.category.ilike(cat))
-        stmt = stmt.order_by(Product.price, Product.name)
-        return list(s.execute(stmt).all())
-
-
-def get_product_by_name(name: Optional[str]) -> Optional[Product]:
-    if not name:
-        return None
-    with SessionLocal() as s:
-        return s.scalars(select(Product).where(Product.name.ilike(name)).limit(1)).first()
-
-
-def search_products_fuzzy(q: str) -> List[Product]:
-    pattern = f"%{q}%"
-    with SessionLocal() as s:
-        stmt = select(Product).where(
-            or_(
-                Product.name.ilike(pattern),
-                Product.brand.ilike(pattern),
-                Product.category.ilike(pattern),
-            )
-        ).order_by(Product.price)
-        return list(s.scalars(stmt))
-
-
-def list_products_by_category(cat: str) -> List[Product]:
-    with SessionLocal() as s:
-        return list(
-            s.scalars(select(Product).where(Product.category.ilike(cat)).order_by(Product.price))
-        )
-
-
-def list_products_by_brand(brand: str) -> List[Product]:
-    with SessionLocal() as s:
-        return list(
-            s.scalars(select(Product).where(Product.brand.ilike(brand)).order_by(Product.price))
-        )
-
-
-def list_by_category_and_size(cat: str, size: int) -> List[Product]:
-    with SessionLocal() as s:
-        rows = s.execute(
-            select(Product)
-            .join(ProductSize, Product.product_id == ProductSize.product_id)
-            .where(Product.category.ilike(cat), ProductSize.size == size, ProductSize.stock > 0)
-            .order_by(Product.price)
-        ).scalars()
-        return list(rows)
-
-
-def list_by_size(size: int) -> List[Product]:
-    with SessionLocal() as s:
-        rows = s.execute(
-            select(Product)
-            .join(ProductSize, Product.product_id == ProductSize.product_id)
-            .where(ProductSize.size == size, ProductSize.stock > 0)
-            .order_by(Product.price)
-        ).scalars()
-        return list(rows)
-
-
-def get_stock_for_product_size(p: Optional[Product], size: Optional[int]) -> int:
-    if not p or size is None:
-        return 0
-    with SessionLocal() as s:
-        val = s.scalar(
-            select(ProductSize.stock).where(
-                ProductSize.product_id == p.product_id, ProductSize.size == size
-            )
-        )
-        return int(val or 0)
-
-
-def list_other_products(exclude_name: str, limit: int = 5, same_category_first: bool = True) -> List[str]:
-    with SessionLocal() as s:
-        base_cat = None
-        if same_category_first and exclude_name:
-            base_cat = s.scalar(
-                select(Product.category).where(Product.name.ilike(exclude_name)).limit(1)
-            )
-
-        names: List[str] = []
-        if base_cat:
-            names.extend(
-                list(
-                    s.scalars(
-                        select(Product.name)
-                        .where(Product.category == base_cat, Product.name != exclude_name)
-                        .order_by(Product.price)
-                        .limit(limit)
-                    )
-                )
-            )
-        if len(names) < limit:
-            names.extend(
-                list(
-                    s.scalars(
-                        select(Product.name)
-                        .where(Product.name != exclude_name)
-                        .order_by(Product.price)
-                        .limit(limit - len(names))
-                    )
-                )
-            )
-        return names
+    """Get all products ordered by ID"""
+    try:
+        with SessionLocal() as s:
+            return list(s.scalars(select(Product).order_by(Product.product_id)))
+    except Exception as e:
+        logger.error(f"Failed to list products: {e}")
+        return []

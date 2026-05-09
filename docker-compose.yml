@@ -1,41 +1,35 @@
-version: "3.9"
 services:
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: shoe_support
-    ports: ["3306:3306"]
-    volumes:
-      - dbdata:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build: .
-    environment:
-      DATABASE_URL: mysql+pymysql://root:root@db:3306/shoe_support
-      OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: llama3.2:3b
-      MAX_HISTORY_MESSAGES: "50"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
     depends_on:
-      db:
-        condition: service_healthy
-      ollama:
-        condition: service_started
-    ports: ["8000:8000"]
+      - db
+      - ollama
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    env_file:
+      - .env
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
 
   ollama:
     image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
     volumes:
-      - ollama:/root/.ollama
-    ports: ["11434:11434"]
-    # optional: pre-pull model on container start (first run will be longer)
-    # command: ["/bin/sh", "-c", "ollama pull llama3.2:3b && ollama serve"]
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
 
 volumes:
-  dbdata:
-  ollama:
+  mysql_data:
+  ollama_data:

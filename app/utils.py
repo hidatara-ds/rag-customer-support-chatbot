@@ -170,9 +170,15 @@ def tool_answer_list(title: str, prods: Iterable[Product]) -> str:
 
 # ---------- PROMPT fallback (LLM) ----------
 def format_history_for_prompt(history: List[Conversation]) -> str:
-    if not history: return ""
-    selected = history[-MAX_HISTORY_MESSAGES:]
-    lines: List[str] = []
+    """
+    Take N interactions (Q/A). Default MEMORY_TURNS = 3 (=> 6 messages max).
+    Ensure chronological order.
+    """
+    if not history:
+        return ""
+    lines = []
+    # history is already chronological
+    selected = history[-(MEMORY_TURNS*2):]  # roughly 3 Q/A = 6 messages
     for msg in selected:
         role = "User" if msg.role == "user" else "Assistant"
         lines.append(f"{role}: {msg.message}")
