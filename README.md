@@ -1,6 +1,14 @@
-# Customer Support Chatbot Project
+# rag-customer-support-chatbot
 
-A customer support chatbot for a shoe store running locally with FastAPI + Ollama. This project stores conversation history in a database and provides a REST API that can be integrated with other applications.
+![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)
+![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-black)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+A customer support chatbot for a coffee store running locally with FastAPI + Ollama. This project uses a RAG-first architecture (Retrieval-Augmented Generation) where it looks up the database first before refining the answer with the LLM.
+
+![Chatbot UI](assets/chatbot-ui.png)
 
 ## 1. Installation & Local Environment Requirements
 - Python 3.11 (recommended) and virtual environment
@@ -8,7 +16,7 @@ A customer support chatbot for a shoe store running locally with FastAPI + Ollam
   - Windows (PowerShell): `python -m venv .venv; .\\.venv\\Scripts\\Activate.ps1`
 - Clone repository
   ```bash
-  git clone <your-repo-url>
+  git clone https://github.com/hidatara-ds/Customer-Support-Chatbot-Project.git
   cd Customer-Support-Chatbot-Project
   ```
 - Install dependencies
@@ -50,7 +58,20 @@ A customer support chatbot for a shoe store running locally with FastAPI + Ollam
   # Services: api + db (MySQL 8) + ollama
   ```
 
-## 2. Database Design
+## 2. Architecture Diagram
+
+```mermaid
+graph TD
+    A[User] -->|Message| B(Intent Detection)
+    B -->|Match| C{DB Lookup}
+    B -->|No Match| D[LLM]
+    C -->|Data Found| E[Tool Context]
+    C -->|No Data| D
+    E --> D
+    D -->|Refined Response| F[Response to User]
+```
+
+## 3. Database Design
 Purpose: store chat history so conversation context can be reused by the LLM.
 
 - Challenge-required table: `chat_history`
@@ -67,7 +88,7 @@ CREATE TABLE IF NOT EXISTS chat_history (
 ```
 Note: This repository implementation already stores conversations in the `conversations` table (with user/assistant roles) and also has catalog tables (`products`, `product_sizes`) and orders (`orders`).
 
-## 3. Libraries and Frameworks Used
+## 4. Libraries and Frameworks Used
 - FastAPI: REST API framework
 - Uvicorn: ASGI server
 - SQLAlchemy: ORM/database access
@@ -81,11 +102,11 @@ Note: This repository implementation already stores conversations in the `conver
 
 (See `requirements.txt` for complete list.)
 
-## 4. LLM Model Used
+## 5. LLM Model Used
 - Llama 3.2 (3B) via Ollama (running locally)
 - Reason: lightweight, open-source, and meets challenge requirements for local LLM
 
-## 5. Questions That Can Be Answered
+## 6. Questions That Can Be Answered
 - Order status
   - Examples: "Where is my order?", "status of sela's order", "check order #12"
 - Product information
@@ -96,15 +117,15 @@ Note: This repository implementation already stores conversations in the `conver
   - Examples: "How do I claim warranty?"
 - Note: can be expanded for other questions as needed.
 
-Demo users (seed) for order checking: `adit`, `sela`, `gilang`. When testing order status/delivery, set the `user` field in the payload to match these names.
+Demo users (seed) for order checking: `alice`, `bob`, `carol`. When testing order status/delivery, set the `user` field in the payload to match these names.
 
-## 6. Tool Calls Available
+## 7. Tool Calls Available
 - Order Status Lookup
   - Chatbot calls external function to check order status based on intent (regex) and/or `order_id` extracted from message. If `order_id` is not available, system uses the last order belonging to `user` in the payload.
   - Standard status output: `processing`, `shipped`, `delivered`, along with product name.
   - Example payload:
     ```json
-    { "user": "sela", "message": "order status" }
+    { "user": "alice", "message": "order status" }
     ```
 - Catalog Lookup (expandable)
   - Product details, available sizes, stock per size.
@@ -257,7 +278,7 @@ Main chat endpoint for customer support interactions.
 Request:
 ```json
 {
-  "user": "gilang",
+  "user": "alice",
   "message": "How much stock for size 42 Ultraboost 22?"
 }
 ```
@@ -273,7 +294,7 @@ Example cURL:
 ```bash
 curl -s http://localhost:8000/chat \
   -H 'Content-Type: application/json' \
-  -d '{"user":"gilang","message":"What types of shoes are available?"}'
+  -d '{"user":"alice","message":"What types of shoes are available?"}'
 ```
 
 ## API Documentation (Swagger / OpenAPI)
@@ -295,7 +316,7 @@ curl -s http://localhost:8000/openapi.json | jq '.info, .paths["/chat"]'
 
 ## Data & Seed
 - Main tables: `products`, `product_sizes` (stock per size), `orders`, `conversations`
-- Seed automatically creates 16+ products from various categories/brands, stock per size, and sample orders for users like `gilang`, `sela`
+- Seed automatically creates 16+ products from various categories/brands, stock per size, and sample orders for users like `alice`, `bob`
 
 ## Architecture Summary
 - Intent and extraction (regex/heuristic) in `app/utils.py`
@@ -313,36 +334,36 @@ curl -s http://localhost:8000/openapi.json | jq '.info, .paths["/chat"]'
 
 Example order status test payload:
 ```json
-{ "user": "sela", "message": "order status" }
+{ "user": "alice", "message": "order status" }
 ```
-Demo users: `adit`, `sela`, `gilang`
+Demo users: `alice`, `bob`, `carol`
 
 ### When Tools Are Used
 - Questions requiring precise data: order status, stock per size, size availability, price list, category/brand/size filter → tool is called
 - General questions (how to choose size, care tips, casual model suggestions) → answered directly by LLM (concise, empathetic), without fabricating numbers
 
 ### Demo Users (Seed) for Order Checking
-Available sample users: `adit`, `sela`, `gilang`. To check order status/delivery, set the `user` column in payload to match these user names.
+Available sample users: `alice`, `bob`, `carol`. To check order status/delivery, set the `user` column in payload to match these user names.
 
 Examples:
 ```bash
 curl -s http://localhost:8000/chat \
   -H 'Content-Type: application/json' \
-  -d '{"user":"adit","message":"check my order"}'
+  -d '{"user":"alice","message":"check my order"}'
 
 curl -s http://localhost:8000/chat \
   -H 'Content-Type: application/json' \
-  -d '{"user":"sela","message":"order status"}'
+  -d '{"user":"bob","message":"order status"}'
 ```
 
 Helper endpoint:
-- `GET /orders/{user}` → get last order for `adit|sela|gilang`
+- `GET /orders/{user}` → get last order for `alice|bob|carol`
 
 ### Example Interaction
 ```json
 POST /chat
 {
-  "user": "gilang",
+  "user": "alice",
   "message": "How much stock for Ultraboost 22 size 42?"
 }
 

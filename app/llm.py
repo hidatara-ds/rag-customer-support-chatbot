@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 def generate_answer(prompt: str, temperature: float = 0.2, max_tokens: int = 256) -> str:
     """
+    Refines a DB-sourced answer into natural language without altering facts, numbers, or prices.
     Call Ollama local API to generate an answer.
     
     Args:
@@ -21,6 +22,7 @@ def generate_answer(prompt: str, temperature: float = 0.2, max_tokens: int = 256
     """
     try:
         url = f"{OLLAMA_HOST}/api/generate"
+        # Indonesian market — by design
         payload = {
             "model": OLLAMA_MODEL,
             "prompt": prompt,

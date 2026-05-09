@@ -51,14 +51,14 @@ def tool_answer_warranty() -> str:
 
 def format_history_for_prompt(history: List[Conversation]) -> str:
     """
-    Ambil N interaksi (Q/A). Default MEMORY_TURNS = 3 (=> 6 pesan max).
-    Pastikan urut kronologis.
+    Take N interactions (Q/A). Default MEMORY_TURNS = 3 (=> 6 messages max).
+    Ensure chronological order.
     """
     if not history:
         return ""
     lines = []
-    # history sudah kronologis
-    selected = history[-(MEMORY_TURNS*2):]  # kira-kira 3 Q/A = 6 messages
+    # history is already chronological
+    selected = history[-(MEMORY_TURNS*2):]  # roughly 3 Q/A = 6 messages
     for msg in selected:
         role = "User" if msg.role == "user" else "Assistant"
         lines.append(f"{role}: {msg.message}")

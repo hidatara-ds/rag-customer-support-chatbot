@@ -1,8 +1,8 @@
--- Buat database
+-- Create database
 CREATE DATABASE IF NOT EXISTS coffee_support CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE coffee_support;
 
--- Tabel
+-- Tables
 CREATE TABLE IF NOT EXISTS products (
   product_id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) UNIQUE,
@@ -26,14 +26,14 @@ CREATE TABLE IF NOT EXISTS conversations (
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Produk kopi dummy
+-- Dummy coffee products
 INSERT INTO products (name, description, price) VALUES
 ('Espresso', 'Strong and rich coffee shot', 2.50),
 ('Latte', 'Espresso with steamed milk and light foam', 3.50),
 ('Cold Brew', 'Smooth cold brewed coffee, less acidic', 3.00)
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
--- Pesanan dummy
+-- Dummy orders
 INSERT INTO orders (user_name, product_id, status) VALUES
 ('alice', 1, 'shipped'),
 ('bob',   2, 'delivered'),
